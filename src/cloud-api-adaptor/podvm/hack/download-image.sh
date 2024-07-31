@@ -11,7 +11,9 @@ function error() {
 }
 
 image=$1
+echo "[image] $image"
 directory=$2
+echo "[directory] $directory"
 output=
 
 shift 2
