@@ -71,7 +71,7 @@ jobs:
       - name: Extract qcow2 from ${{ inputs.podvm_image }}
         working-directory: src/cloud-api-adaptor/podvm
         run: |
-          echo "TEST_PWD=$(pwd)" >> "$GITHUB_ENV"
+           echo "TEST_PWD=$(pwd)" >> "$GITHUB_ENV"
            qcow2=$(echo ${{ inputs.podvm_image }} | sed -e "s#.*/\(.*\):.*#\1.qcow2#")
            ./hack/download-image.sh ${{ inputs.podvm_image }} . -o ${qcow2}
            echo "PWD=$(pwd)" >> "$GITHUB_ENV"
