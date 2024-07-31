@@ -24,13 +24,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const CURL_IMAGE = "quay.io/curl/curl:latest"
 const BUSYBOX_IMAGE = "quay.io/prometheus/busybox:latest"
 const WAIT_DEPLOYMENT_AVAILABLE_TIMEOUT = time.Second * 180
 const DEFAULT_AUTH_SECRET = "auth-json-secret-default"
 
 func isTestWithKbs() bool {
-	return os.Getenv("TEST_KBS") == "yes"
+	return os.Getenv("TEST_KBS") == "yes" || os.Getenv("TEST_KBS") == "true"
 }
 
 // Setup of Trustee Operator is required for this test
@@ -39,8 +38,24 @@ func isTestWithTrusteeOperator() bool {
 	return os.Getenv("TEST_TRUSTEE_OPERATOR") == "yes"
 }
 
+func isTestWithKbsIBMSE() bool {
+	return os.Getenv("IBM_SE_CREDS_DIR") != ""
+}
+
 func isTestOnCrio() bool {
 	return os.Getenv("CONTAINER_RUNTIME") == "crio"
+}
+
+func enableAllowAllPodPolicyOverride() bool {
+	return os.Getenv("POD_ALLOW_ALL_POLICY_OVERRIDE") == "yes"
+}
+
+func encodePolicyFile(policyFilePath string) string {
+	policyString, err := os.ReadFile(policyFilePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return b64.StdEncoding.EncodeToString([]byte(policyString))
 }
 
 type PodOption func(*corev1.Pod)
@@ -147,8 +162,12 @@ func WithInitContainers(initContainers []corev1.Container) PodOption {
 
 func NewPod(namespace string, podName string, containerName string, imageName string, options ...PodOption) *corev1.Pod {
 	runtimeClassName := "kata-remote"
+	annotationData := map[string]string{}
+
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: podName, Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: podName,
+			Namespace:   namespace,
+			Annotations: annotationData},
 		Spec: corev1.PodSpec{
 			Containers:       []corev1.Container{{Name: containerName, Image: imageName, ImagePullPolicy: corev1.PullAlways}},
 			RuntimeClassName: &runtimeClassName,
@@ -157,6 +176,14 @@ func NewPod(namespace string, podName string, containerName string, imageName st
 
 	for _, option := range options {
 		option(pod)
+	}
+
+	// Don't override the policy annotation if it's already set
+	if enableAllowAllPodPolicyOverride() {
+		allowAllPolicyFilePath := "fixtures/policies/allow-all.rego"
+		if _, ok := pod.ObjectMeta.Annotations["io.katacontainers.config.agent.policy"]; !ok {
+			pod.ObjectMeta.Annotations["io.katacontainers.config.agent.policy"] = encodePolicyFile(allowAllPolicyFilePath)
+		}
 	}
 
 	return pod
@@ -187,25 +214,15 @@ func NewPodWithInitContainer(namespace string, podName string) *corev1.Pod {
 	return NewPod(namespace, podName, "busybox", BUSYBOX_IMAGE, WithCommand([]string{"/bin/sh", "-c", "sleep 3600"}), WithInitContainers(initContainer))
 }
 
-func NewCurlPodWithName(namespace, podName string) *corev1.Pod {
-	return NewPod(namespace, podName, "curl", CURL_IMAGE, WithCommand([]string{"/bin/sh", "-c", "sleep 3600"}))
-}
-
 func NewBusyboxPodWithName(namespace, podName string) *corev1.Pod {
 	return NewPod(namespace, podName, "busybox", BUSYBOX_IMAGE, WithCommand([]string{"/bin/sh", "-c", "sleep 3600"}))
 }
 
 func NewPodWithPolicy(namespace, podName, policyFilePath string) *corev1.Pod {
-	policyString, err := os.ReadFile(policyFilePath)
-	if err != nil {
-		log.Fatal(err)
-	}
-	encodedPolicy := b64.StdEncoding.EncodeToString([]byte(policyString))
-
 	containerName := "busybox"
 	imageName := BUSYBOX_IMAGE
 	annotationData := map[string]string{
-		"io.katacontainers.config.agent.policy": encodedPolicy,
+		"io.katacontainers.config.agent.policy": encodePolicyFile(policyFilePath),
 	}
 	return NewPod(namespace, podName, containerName, imageName, WithCommand([]string{"/bin/sh", "-c", "sleep 3600"}), WithAnnotations(annotationData))
 }
