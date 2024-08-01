@@ -67,11 +67,10 @@ jobs:
         run: |
           sudo apt-get install -y docker.io
           sudo usermod -aG docker "$USER"
-          
+
       - name: Extract qcow2 from ${{ inputs.podvm_image }}
         working-directory: src/cloud-api-adaptor/podvm
         run: |
-           ls 
            echo ${{ inputs.podvm_image }}
            qcow2=$(echo ${{ inputs.podvm_image }} | sed -e "s#.*/\(.*\):.*#\1.qcow2#")
            ./hack/download-image.sh ${{ inputs.podvm_image }} . -o ${qcow2}
