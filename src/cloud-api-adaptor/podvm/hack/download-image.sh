@@ -7,6 +7,7 @@ function usage() {
 }
 
 function error() {
+    echo "error function"
     echo "[ERROR] $1" 1>&2 && exit 1
 }
 
@@ -41,14 +42,16 @@ fi
 [ -z "$container_binary" ] && error "please install docker or podman"
 
 # Create a non-running container to extract image
-$container_binary create --platform=amd64 --name "$container_name" "$image" /bin/sh >/dev/null 2>&1;
+$container_binary create --platform=s390x --name "$container_name" "$image" /bin/sh >/dev/null 2>&1;
 # Destory container after use
 rm-container(){
+    echo "rm-container function"
     $container_binary rm -f "$container_name" >/dev/null 2>&1;
 }
 trap rm-container 0
 
 podvm=$($container_binary export "$container_name" | tar t | grep podvm)
+ echo "podvm:::: $podvm"
 # Check if file is in image
 [ -z "$podvm" ] && error "unable to find podvm qcow2 image"
 # If output is not set default to podvm name
