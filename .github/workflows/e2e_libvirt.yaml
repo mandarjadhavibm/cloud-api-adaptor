@@ -76,7 +76,7 @@ jobs:
            echo "$qcow2"
            echo "Printing files"
            ls
-           ./hack/download-image.sh ${{ inputs.podvm_image }} . -o ${qcow2}
+           ./hack/download-image.sh ghcr.io/confidential-containers/podvm-generic-ubuntu-s390x:latest . -o ${qcow2}
            echo "OUTPUT QCOW2"
            echo "$qcow2"
            echo "PODVM_QCOW2=$(pwd)/${qcow2}" >> "$GITHUB_ENV"
