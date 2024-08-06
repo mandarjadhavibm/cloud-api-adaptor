@@ -123,8 +123,8 @@ jobs:
           REGISTRY_CREDENTIAL_ENCODED: ${{ secrets.REGISTRY_CREDENTIAL_ENCODED }}
         run: |
           export CLOUD_PROVIDER=libvirt
-          export DEPLOY_KBS=true
-          export TEST_PROVISION="yes"
+          export DEPLOY_KBS=false
+          export TEST_PROVISION="no"
           export TEST_TEARDOWN="no"
           export TEST_PROVISION_FILE="$PWD/libvirt.properties"
           export TEST_PODVM_IMAGE="${{ env.PODVM_QCOW2 }}"
