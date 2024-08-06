@@ -4,6 +4,7 @@
 package vxlan
 
 import (
+	"errors"
 	"fmt"
 	"net/netip"
 
@@ -12,8 +13,8 @@ import (
 )
 
 const (
-	podVxlanInterface = "vxlan0"
-	maxMTU            = 1450
+	hostVxlanInterface = "vxlan0"
+	maxMTU             = 1450
 )
 
 type podNodeTunneler struct {
@@ -24,6 +25,11 @@ func NewPodNodeTunneler() tunneler.Tunneler {
 }
 
 func (t *podNodeTunneler) Setup(nsPath string, podNodeIPs []netip.Addr, config *tunneler.Config) error {
+
+	podVxlanInterface := config.InterfaceName
+	if podVxlanInterface == "" {
+		return errors.New("InterfaceName is not specified")
+	}
 
 	nodeAddr := config.WorkerNodeIP
 
@@ -53,13 +59,17 @@ func (t *podNodeTunneler) Setup(nsPath string, podNodeIPs []netip.Addr, config *
 		ID:    config.VXLANID,
 		Port:  config.VXLANPort,
 	}
-	vxlan, err := hostNS.LinkAdd(podVxlanInterface, vxlanDevice)
+	vxlan, err := hostNS.LinkAdd(hostVxlanInterface, vxlanDevice)
 	if err != nil {
-		return fmt.Errorf("failed to add vxlan interface %s: %w", podVxlanInterface, err)
+		return fmt.Errorf("failed to add vxlan interface %s: %w", hostVxlanInterface, err)
 	}
 
 	if err := vxlan.SetNamespace(podNS); err != nil {
-		return fmt.Errorf("failed to move vxlan interface %s to netns %s: %w", podVxlanInterface, podNS.Path(), err)
+		return fmt.Errorf("failed to move vxlan interface %s to netns %s: %w", hostVxlanInterface, podNS.Path(), err)
+	}
+
+	if err := vxlan.SetName(podVxlanInterface); err != nil {
+		return fmt.Errorf("failed to rename vxlan interface %s on netns %s: %w", hostVxlanInterface, podNS.Path(), err)
 	}
 
 	if err := vxlan.SetHardwareAddr(config.PodHwAddr); err != nil {
@@ -80,26 +90,6 @@ func (t *podNodeTunneler) Setup(nsPath string, podNodeIPs []netip.Addr, config *
 
 	if err := vxlan.SetUp(); err != nil {
 		return err
-	}
-
-	// We need to process routes without gateway address first. Processing routes with a gateway causes an error if the gateway is not reachable.
-	// Calico sets up routes with this pattern.
-	// https://github.com/projectcalico/cni-plugin/blob/7495c0279c34faac315b82c1838bca638e23dbbe/pkg/dataplane/linux/dataplane_linux.go#L158-L167
-
-	var first, second []*tunneler.Route
-	for _, route := range config.Routes {
-		if !route.GW.IsValid() {
-			first = append(first, route)
-		} else {
-			second = append(second, route)
-		}
-	}
-	routes := append(first, second...)
-
-	for _, route := range routes {
-		if err := podNS.RouteAdd(&netops.Route{Destination: route.Dst, Gateway: route.GW, Device: podVxlanInterface}); err != nil {
-			return fmt.Errorf("failed to add a route to %s via %s on pod network namespace %s: %w", route.Dst, route.GW, nsPath, err)
-		}
 	}
 
 	return nil

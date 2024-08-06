@@ -21,7 +21,6 @@ func NewPodNodeTunneler() tunneler.Tunneler {
 }
 
 const (
-	podVEthName  = "eth0"
 	hostVEthName = "veth0"
 
 	podTableID          = 45001
@@ -37,6 +36,11 @@ func (t *podNodeTunneler) Setup(nsPath string, podNodeIPs []netip.Addr, config *
 
 	if len(podNodeIPs) != 2 {
 		return errors.New("secondary pod node IP is not available")
+	}
+
+	podVEthName := config.InterfaceName
+	if podVEthName == "" {
+		return errors.New("InterfaceName is not specified")
 	}
 
 	podNodeIP := podNodeIPs[1]
@@ -97,21 +101,7 @@ func (t *podNodeTunneler) Setup(nsPath string, podNodeIPs []netip.Addr, config *
 
 	var defaultRouteGateway netip.Addr
 
-	// We need to process routes without gateway address first. Processing routes with a gateway causes an error if the gateway is not reachable.
-	// Calico sets up routes with this pattern.
-	// https://github.com/projectcalico/cni-plugin/blob/7495c0279c34faac315b82c1838bca638e23dbbe/pkg/dataplane/linux/dataplane_linux.go#L158-L167
-
-	var first, second []*tunneler.Route
 	for _, route := range config.Routes {
-		if !route.GW.IsValid() {
-			first = append(first, route)
-		} else {
-			second = append(second, route)
-		}
-	}
-	routes := append(first, second...)
-
-	for _, route := range routes {
 		if err := podNS.RouteAdd(&netops.Route{Destination: route.Dst, Gateway: route.GW, Device: podVEthName}); err != nil {
 			return fmt.Errorf("failed to add a route to %s via %s on pod network namespace %s: %w", route.Dst, route.GW, nsPath, err)
 		}

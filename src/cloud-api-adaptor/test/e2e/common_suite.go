@@ -6,6 +6,7 @@ package e2e
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"os"
 	"strconv"
@@ -436,13 +437,13 @@ func DoTestPodVMwithAnnotationsLargerCPU(t *testing.T, e env.Environment, assert
 }
 
 func DoTestPodToServiceCommunication(t *testing.T, e env.Environment, assert CloudAssert) {
-	clientPodName := "busybox"
+	clientPodName := "test-client"
 	clientContainerName := "busybox"
 	clientImageName := BUSYBOX_IMAGE
-	serverPodName := "nginx"
+	serverPodName := "test-server"
 	serverContainerName := "nginx"
 	serverImageName := "nginx:latest"
-	serviceName := "nginx"
+	serviceName := "nginx-server"
 	labels := map[string]string{
 		"app": "nginx",
 	}
@@ -450,7 +451,7 @@ func DoTestPodToServiceCommunication(t *testing.T, e env.Environment, assert Clo
 	serverPod := NewPod(E2eNamespace, serverPodName, serverContainerName, serverImageName, WithContainerPort(80), WithRestartPolicy(v1.RestartPolicyNever), WithLabel(labels))
 	testCommands := []TestCommand{
 		{
-			Command:       []string{"wget", "-O-", "nginx"},
+			Command:       []string{"wget", "-O-", "nginx-server"},
 			ContainerName: clientPod.pod.Spec.Containers[0].Name,
 			TestCommandStdoutFn: func(stdout bytes.Buffer) bool {
 				if strings.Contains(stdout.String(), "Thank you for using nginx") {
@@ -477,16 +478,16 @@ func DoTestPodToServiceCommunication(t *testing.T, e env.Environment, assert Clo
 }
 
 func DoTestPodsMTLSCommunication(t *testing.T, e env.Environment, assert CloudAssert) {
-	clientPodName := "curl"
+	clientPodName := "mtls-client"
 	clientContainerName := "curl"
 	clientImageName := "docker.io/curlimages/curl:8.4.0"
-	serverPodName := "nginx"
+	serverPodName := "mtls-server"
 	serverContainerName := "nginx"
 	serverImageName := "nginx:latest"
 	caService, _ := tlsutil.NewCAService("nginx")
 	serverCACertPEM := caService.RootCertificate()
-	serverName := "nginx"
-	serverCertPEM, serverKeyPEM, _ := caService.Issue(serverName)
+	serviceName := "nginx-mtls"
+	serverCertPEM, serverKeyPEM, _ := caService.Issue(serviceName)
 	clientCertPEM, clientKeyPEM, _ := tlsutil.NewClientCertificate("curl")
 	clientSecretDir := "/etc/certs"
 	serverSecretDir := "/etc/nginx/certs"
@@ -541,9 +542,10 @@ func DoTestPodsMTLSCommunication(t *testing.T, e env.Environment, assert CloudAs
 	serverPod := NewPod(E2eNamespace, serverPodName, serverContainerName, serverImageName, WithSecureContainerPort(443), WithSecretBinding(serverSecretDir, serverSecretName), WithLabel(labels), WithConfigMapBinding(podKubeConfigmapDir, configMapName))
 	configMap := NewConfigMap(E2eNamespace, configMapName, configMapData)
 
+	serviceUrl := fmt.Sprintf("https://%s", serviceName)
 	testCommands := []TestCommand{
 		{
-			Command:       []string{"curl", "--key", "/etc/certs/tls.key", "--cert", "/etc/certs/tls.crt", "--cacert", "/etc/certs/ca.crt", "https://nginx"},
+			Command:       []string{"curl", "--key", "/etc/certs/tls.key", "--cert", "/etc/certs/tls.crt", "--cacert", "/etc/certs/ca.crt", serviceUrl},
 			ContainerName: clientPod.pod.Spec.Containers[0].Name,
 			TestCommandStdoutFn: func(stdout bytes.Buffer) bool {
 				if strings.Contains(stdout.String(), "Thank you for using nginx") {
@@ -556,7 +558,6 @@ func DoTestPodsMTLSCommunication(t *testing.T, e env.Environment, assert CloudAs
 			},
 		},
 	}
-	serviceName := "nginx"
 	clientPod.WithTestCommands(testCommands)
 	httpsPort := corev1.ServicePort{
 		Name:       "https",
@@ -576,7 +577,7 @@ func DoTestPodsMTLSCommunication(t *testing.T, e env.Environment, assert CloudAs
 // as test cases might be run in parallel
 func DoTestKbsKeyRelease(t *testing.T, e env.Environment, assert CloudAssert) {
 	t.Log("Do test kbs key release")
-	pod := NewBusyboxPodWithName(E2eNamespace, "busybox-wget")
+	pod := NewBusyboxPodWithName(E2eNamespace, "kbs-key-release")
 	testCommands := []TestCommand{
 		{
 			Command:       []string{"wget", "-q", "-O-", "http://127.0.0.1:8006/cdh/resource/reponame/workload_key/key.bin"},
@@ -600,7 +601,7 @@ func DoTestKbsKeyRelease(t *testing.T, e env.Environment, assert CloudAssert) {
 // as test cases might be run in parallel
 func DoTestKbsKeyReleaseForFailure(t *testing.T, e env.Environment, assert CloudAssert) {
 	t.Log("Do test kbs key release failure case")
-	pod := NewBusyboxPodWithName(E2eNamespace, "busybox-wget-failure")
+	pod := NewBusyboxPodWithName(E2eNamespace, "kbs-failure")
 	testCommands := []TestCommand{
 		{
 			Command:       []string{"wget", "-q", "-O-", "http://127.0.0.1:8006/cdh/resource/reponame/workload_key/key.bin"},
@@ -631,7 +632,7 @@ func DoTestKbsKeyReleaseForFailure(t *testing.T, e env.Environment, assert Cloud
 // Test to check for specific key value from Trustee Operator Deployment
 func DoTestTrusteeOperatorKeyReleaseForSpecificKey(t *testing.T, e env.Environment, assert CloudAssert) {
 	t.Log("Do test Trustee operator key release for specific key")
-	pod := NewBusyboxPodWithName(E2eNamespace, "busybox-wget")
+	pod := NewBusyboxPodWithName(E2eNamespace, "op-key-release")
 	testCommands := []TestCommand{
 		{
 			Command:       []string{"wget", "-q", "-O-", "http://127.0.0.1:8006/cdh/resource/default/kbsres1/key1"},
@@ -776,7 +777,7 @@ func DoTestPodWithInitContainer(t *testing.T, e env.Environment, assert CloudAss
 
 // Test to run specific commands in a pod and check the output
 func DoTestPodWithSpecificCommands(t *testing.T, e env.Environment, assert CloudAssert, testCommands []TestCommand) {
-	pod := NewBusyboxPodWithName(E2eNamespace, "simple-test")
+	pod := NewBusyboxPodWithName(E2eNamespace, "command-test")
 
 	NewTestCase(t, e, "PodWithSpecificCommands", assert, "Pod with specific commands").WithPod(pod).WithTestCommands(testCommands).Run()
 }
