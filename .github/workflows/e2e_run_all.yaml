@@ -163,8 +163,7 @@ jobs:
           - ubuntu
         provider:
           - generic
-        arch:
-          - s390x
+        arch: [amd64, s390x]
     uses: ./.github/workflows/e2e_libvirt.yaml
     with:
       caa_image: ${{ inputs.registry }}/cloud-api-adaptor:${{ inputs.caa_image_tag }}-dev
