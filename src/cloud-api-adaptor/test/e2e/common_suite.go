@@ -151,7 +151,8 @@ func DoTestCreatePeerPodContainerWithExternalIPAccess(t *testing.T, e env.Enviro
 
 func DoTestCreatePeerPodWithJob(t *testing.T, e env.Environment, assert CloudAssert) {
 	jobName := "job-pi"
-	job := NewJob(E2eNamespace, jobName)
+	image := "quay.io/prometheus/busybox:latest"
+	job := NewJob(E2eNamespace, jobName, 8, image)
 	expectedPodLogString := "3.14"
 	NewTestCase(t, e, "JobPeerPod", assert, "Job has been created").WithJob(job).WithExpectedPodLogString(expectedPodLogString).Run()
 }
@@ -445,7 +446,7 @@ func DoTestPodToServiceCommunication(t *testing.T, e env.Environment, assert Clo
 	serverImageName := "nginx:latest"
 	serviceName := "nginx-server"
 	labels := map[string]string{
-		"app": "nginx",
+		"app": "nginx-server",
 	}
 	clientPod := NewExtraPod(E2eNamespace, clientPodName, clientContainerName, clientImageName, WithCommand([]string{"/bin/sh", "-c", "sleep 3600"}), WithRestartPolicy(v1.RestartPolicyNever))
 	serverPod := NewPod(E2eNamespace, serverPodName, serverContainerName, serverImageName, WithContainerPort(80), WithRestartPolicy(v1.RestartPolicyNever), WithLabel(labels))
@@ -537,7 +538,7 @@ func DoTestPodsMTLSCommunication(t *testing.T, e env.Environment, assert CloudAs
 			`,
 	}
 	labels := map[string]string{
-		"app": "nginx",
+		"app": "mtls-server",
 	}
 	serverPod := NewPod(E2eNamespace, serverPodName, serverContainerName, serverImageName, WithSecureContainerPort(443), WithSecretBinding(serverSecretDir, serverSecretName), WithLabel(labels), WithConfigMapBinding(podKubeConfigmapDir, configMapName))
 	configMap := NewConfigMap(E2eNamespace, configMapName, configMapData)
