@@ -7,10 +7,10 @@
 name: daily e2e tests for libvirt
 
 on:
-  schedule:
+  # schedule:
   # Runs "at 04:15(UTC time) every day" (see https://crontab.guru)
   # will base on default branch `main`
-    - cron: '15 4 * * *'
+  #  - cron: '15 4 * * *'
   workflow_dispatch:
 
 jobs:
